@@ -2,11 +2,16 @@
 
 This directory contains an isolated, standalone version of the JIT NEPPO (JAX-based racing environment) module, extracted from the main peg_racer repository.
 
+**✨ Ready to use!** This module includes example data for the Berlin 2018 track, so you can start testing immediately.
+
 ## Files
 
 - **jit_neppo.py** - Main module containing the racing environment dynamics and functions
 - **jax_waypoint.py** - Waypoint generation and trajectory following utilities
-- **data/** - Directory for configuration files and reference trajectories (you need to populate this)
+- **data/** - Directory with example track data (Berlin 2018 track included)
+  - **params-num.yaml** - Track configuration file
+  - **ref_trajs/berlin_2018_with_speeds.csv** - Reference trajectory data
+- **verify_data.py** - Script to verify data files are properly configured
 
 ## Dependencies
 
@@ -58,15 +63,17 @@ reset_fn, step_fn = build_step_and_reset(
 
 ## Data Structure
 
-The module expects the following data structure:
+The module includes example data files for the Berlin 2018 track:
 
 ```
 jit_neppo_isolated/
 ├── data/
-│   ├── params-num.yaml          # Track configuration
+│   ├── params-num.yaml                    # Track configuration (included)
 │   └── ref_trajs/
-│       └── <centerline>_with_speeds.csv  # Reference trajectory
+│       └── berlin_2018_with_speeds.csv    # Reference trajectory (included)
 ```
+
+**Note:** The example data is included and ready to use! You can test the module immediately or replace with your own track data.
 
 ### YAML Configuration Format
 
