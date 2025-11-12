@@ -1,0 +1,5 @@
+track_info:
+  centerline_file: berlin_2018.csv
+  ox: 0
+  oy: 0
+  scale: 1.0
