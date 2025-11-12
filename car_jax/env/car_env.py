@@ -6,7 +6,7 @@ from jaxtyping import Array, Key, PyTree
 import gymnasium as gym
 from typing import Optional
 
-from car_dynamics.models_jax import DynamicBicycleModel, DynamicParams, CarState
+from car_dynamics.dbm import DynamicBicycleModel, DynamicParams, CarState
 
 
 @struct.dataclass

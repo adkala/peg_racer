@@ -16,7 +16,7 @@ from car_jax.env import CarEnv
 from car_jax.sim import Sim
 from car_jax.sim.waypoint_agent import WaypointAgent
 from car_jax.sim.racing_reward import RelativeProgressReward
-from car_dynamics.models_jax import DynamicParams
+from car_dynamics.dbm import DynamicParams
 from waypoint_generator import WaypointGenerator
 
 
