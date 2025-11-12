@@ -45,6 +45,9 @@ class RacingVisualizer:
 
         # Track data
         self.track_waypoints = None
+        self.track_left_boundary = None
+        self.track_right_boundary = None
+        self.track_width = 1.0
         self.track_scale = 1.0
         self.track_offset = np.array([0.0, 0.0])
 
@@ -66,6 +69,7 @@ class RacingVisualizer:
             scale = params['track_info']['scale']
             ox = params['track_info']['ox']
             oy = params['track_info']['oy']
+            self.track_width = params['track_info']['track_width'] * scale
 
             # Load CSV trajectory
             csv_path = f'data/ref_trajs/{centerline_file}_with_speeds.csv'
@@ -74,6 +78,9 @@ class RacingVisualizer:
             # Extract x, y positions and apply scale/offset
             waypoints = np.array(df.iloc[:, 1:3]) * scale + np.array([ox, oy])
             self.track_waypoints = waypoints
+
+            # Compute track boundaries
+            self._compute_track_boundaries()
 
             # Compute appropriate scale and offset for visualization
             self._compute_viewport()
@@ -87,7 +94,37 @@ class RacingVisualizer:
                 radius * np.cos(angles),
                 radius * np.sin(angles)
             ])
+            self.track_width = 10.0
+            self._compute_track_boundaries()
             self._compute_viewport()
+
+    def _compute_track_boundaries(self):
+        """Compute left and right track boundaries from centerline."""
+        if self.track_waypoints is None or len(self.track_waypoints) < 2:
+            return
+
+        # Compute tangent vectors using adjacent waypoints
+        # For closed track, use wrap-around
+        n_points = len(self.track_waypoints)
+        prev_points = np.roll(self.track_waypoints, 1, axis=0)
+        next_points = np.roll(self.track_waypoints, -1, axis=0)
+
+        # Tangent direction (from previous to next point)
+        tangents = next_points - prev_points
+        tangent_norms = np.linalg.norm(tangents, axis=1, keepdims=True)
+        tangent_norms = np.maximum(tangent_norms, 1e-6)  # Avoid division by zero
+        tangents_normalized = tangents / tangent_norms
+
+        # Normal vectors (perpendicular to tangent, rotated 90 degrees)
+        # Rotate by 90 degrees: (x, y) -> (-y, x) for left, (y, -x) for right
+        normals_left = np.column_stack([-tangents_normalized[:, 1],
+                                         tangents_normalized[:, 0]])
+        normals_right = -normals_left
+
+        # Compute boundaries
+        half_width = self.track_width / 2.0
+        self.track_left_boundary = self.track_waypoints + normals_left * half_width
+        self.track_right_boundary = self.track_waypoints + normals_right * half_width
 
     def _compute_viewport(self):
         """Compute scale and offset to fit track in window."""
@@ -127,15 +164,26 @@ class RacingVisualizer:
         if self.track_waypoints is None:
             return
 
-        # Draw track centerline
+        # Draw track boundaries
+        if self.track_left_boundary is not None:
+            left_points = [self.world_to_screen(x, y) for x, y in self.track_left_boundary]
+            if len(left_points) > 1:
+                pygame.draw.lines(self.screen, self.TRACK_BORDER_COLOR, True, left_points, 3)
+
+        if self.track_right_boundary is not None:
+            right_points = [self.world_to_screen(x, y) for x, y in self.track_right_boundary]
+            if len(right_points) > 1:
+                pygame.draw.lines(self.screen, self.TRACK_BORDER_COLOR, True, right_points, 3)
+
+        # Draw track centerline (thinner, dimmer)
         points = [self.world_to_screen(x, y) for x, y in self.track_waypoints]
         if len(points) > 1:
-            pygame.draw.lines(self.screen, self.TRACK_BORDER_COLOR, True, points, 2)
+            pygame.draw.lines(self.screen, (100, 100, 100), True, points, 1)
 
-        # Draw waypoint dots
-        for x, y in self.track_waypoints[::20]:  # Draw every 20th waypoint
+        # Draw waypoint dots (optional, smaller now)
+        for x, y in self.track_waypoints[::50]:  # Draw every 50th waypoint
             screen_pos = self.world_to_screen(x, y)
-            pygame.draw.circle(self.screen, self.WAYPOINT_COLOR, screen_pos, 2)
+            pygame.draw.circle(self.screen, self.WAYPOINT_COLOR, screen_pos, 1)
 
     def draw_car(self, x, y, psi, car_id=0, label=""):
         """
