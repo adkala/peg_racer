@@ -302,14 +302,19 @@ def main():
     print("Single-Agent Racing Training with perl_jax PPO")
     print("=" * 80)
 
+    # Create run name (used for both wandb and policy folder)
+    run_name = args.wandb_run_name or f"perl-ppo-{time.strftime('%m_%d-%H_%M_%S')}"
+
+    # Create policies directory with experiment name
+    policies_dir = Path("policies") / run_name
+    policies_dir.mkdir(parents=True, exist_ok=True)
+    print(f"\nPolicies will be saved to: {policies_dir}")
+
     # Initialize wandb
     if args.use_wandb:
         try:
             import wandb
 
-            run_name = (
-                args.wandb_run_name or f"perl-ppo-{time.strftime('%m_%d-%H_%M_%S')}"
-            )
             wandb.init(
                 project="racing",
                 entity="peu",
@@ -499,10 +504,8 @@ def main():
 
         # Save policy checkpoint
         if iteration % args.save_frequency == 0 or iteration == args.num_iterations - 1:
-            checkpoint_path = (
-                f"{args.save_path.replace('.pth', '')}_{iteration:04d}.pth"
-            )
-            save_actor(trainer.actor.trl_actor, checkpoint_path)
+            checkpoint_path = policies_dir / f"policy_{iteration:04d}.pth"
+            save_actor(trainer.actor.trl_actor, str(checkpoint_path))
             print(f"  Saved checkpoint to {checkpoint_path}")
 
     elapsed_time = time.time() - start_time
@@ -512,15 +515,16 @@ def main():
     print(f"Average time per iteration: {elapsed_time / args.num_iterations:.2f}s")
 
     # Save final policy
-    print(f"\n[4/4] Saving final policy to {args.save_path}...")
-    save_actor(trainer.actor.trl_actor, args.save_path)
+    final_policy_path = policies_dir / "policy_final.pth"
+    print(f"\n[4/4] Saving final policy to {final_policy_path}...")
+    save_actor(trainer.actor.trl_actor, str(final_policy_path))
     print("  Policy saved successfully")
 
     # Upload to wandb
     if args.use_wandb:
         import wandb
 
-        wandb.save(args.save_path)
+        wandb.save(str(final_policy_path))
         wandb.finish()
         print("  Policy uploaded to wandb")
 
