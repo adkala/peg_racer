@@ -1,9 +1,21 @@
-torch
+# Core JAX dependencies
+jax
+jaxlib
+flax
+jaxtyping
 
+# Environment
+gymnasium
+
+# Data processing
 numpy
-matplotlib
-scipy
-PyYAML
-torch
-casadi
+pandas
+pyyaml
 
+# Visualization
+pygame
+Pillow
+
+# Optional: for advanced features
+# matplotlib
+# scipy

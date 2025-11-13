@@ -51,10 +51,14 @@ peg_racer/
 ├── waypoint_generator.py          # Waypoint generation (learning support)
 ├── racing_env.py                  # Main racing environment
 ├── test_racing_env.py             # Test script
+├── visualizer.py                  # Pygame visualizer with mp4 recording
+├── demo_racing_viz.py             # Visualization demo script
 ├── data/
 │   └── params-num.yaml            # Track configuration
 ├── ref_trajs/                     # Track CSV files
 │   └── berlin_2018_with_speeds.csv
+├── car_dynamics/                  # Physics module
+│   └── dbm.py                    # Dynamic Bicycle Model
 └── car_jax/                       # Environment framework
     ├── env/
     │   └── car_env.py            # Core car environment
@@ -75,6 +79,81 @@ The new implementation improves on `jit_neppo.py` by:
 3. **Clarity**: Clear separation between environment (car_jax) and learning (waypoint_generator)
 4. **Flexibility**: Easy to swap agents, rewards, or add new features
 5. **Maintainability**: Uses established abstractions instead of monolithic code
+
+## Visualization
+
+The repository includes a pygame-based visualizer for debugging and demonstration purposes.
+
+### Running the Visualizer
+
+```bash
+# Set PYTHONPATH
+export PYTHONPATH=/home/user/peg_racer:/home/user/peg_racer/car_dynamics
+
+# Run visualization demo
+python demo_racing_viz.py
+
+# Run with video recording
+python demo_racing_viz.py --record --output my_race.mp4
+
+# Run for 1000 steps at 30 FPS
+python demo_racing_viz.py --steps 1000 --fps 30
+```
+
+### Visualization Features
+
+- **Real-time rendering**: Watch the race unfold in pygame window
+- **Track visualization**: Shows track centerline and boundaries
+- **Car visualization**: Displays cars with heading indicators and labels
+- **Info panel**: Shows step count, rewards, and speeds
+- **Video recording**: Save races as mp4 files for later analysis
+- **Interactive controls**:
+  - `SPACE`: Pause/Resume simulation
+  - `ESC`: Quit
+
+### Using the Visualizer in Code
+
+```python
+from racing_env import build_racing_env
+from visualizer import RacingVisualizer
+import jax
+
+# Build environment
+env = build_racing_env(num_cars=3, max_steps=500)
+
+# Create visualizer with video recording
+viz = RacingVisualizer(
+    width=1200,
+    height=800,
+    fps=20,
+    record_video=True,
+    video_path="output.mp4"
+)
+
+# Reset environment
+key = jax.random.PRNGKey(42)
+env_obs, obs_for_pi, agent_ctx, sim_ctx = env.reset(key)
+
+# Simulation loop
+for step in range(500):
+    # Your policy here
+    actions = [...]
+
+    # Step environment
+    env_obs, rewards, terminated, truncated, obs_for_pi, agent_ctx, sim_ctx = env.step(
+        env_obs, actions, agent_ctx, sim_ctx
+    )
+
+    # Render
+    viz.render(env_obs.state, step, rewards)
+
+    # Check for quit/pause
+    if viz.check_quit() == 'quit':
+        break
+
+# Close (saves video if recording)
+viz.close()
+```
 
 ## Usage
 
