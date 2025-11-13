@@ -1,7 +1,8 @@
 """
 Single-agent racing environment for training a car to complete a track.
-Based on jit_neppo.py but simplified for single-agent learning.
+Uses MPC-inspired reward function for training with perl_jax.
 """
+
 from dataclasses import dataclass
 from typing import NamedTuple, Tuple
 import os
@@ -11,6 +12,12 @@ import numpy as np
 import pandas as pd
 import yaml
 from jax_waypoint import init_waypoints, generate
+from mpc_reward import (
+    compute_mpc_reward,
+    RewardState,
+    MPCRewardConfig,
+    create_default_reward_config,
+)
 
 GRAVITY = 9.81
 
@@ -30,6 +37,7 @@ class EnvState(NamedTuple):
     t: jnp.int32  # type: ignore
     last_s: jnp.ndarray  # last progress along track
     track_L: float
+    reward_state: RewardState  # MPC reward state
 
 
 @dataclass
@@ -57,11 +65,31 @@ class DynamicParams:
 
 
 def dbm_dxdt(
-    x, y, psi, vx, vy, omega,
-    target_vel, target_steer,
-    Ta, Tb, Sa, Sb, LF, LR, MASS,
-    K_RFY, K_FFY, Iz, mu, Cf, Cr,
-    Bf, Br, hcom, fr,
+    x,
+    y,
+    psi,
+    vx,
+    vy,
+    omega,
+    target_vel,
+    target_steer,
+    Ta,
+    Tb,
+    Sa,
+    Sb,
+    LF,
+    LR,
+    MASS,
+    K_RFY,
+    K_FFY,
+    Iz,
+    mu,
+    Cf,
+    Cr,
+    Bf,
+    Br,
+    hcom,
+    fr,
 ):
     steer = target_steer * Sa + Sb
     prev_vel = jnp.hypot(vx, vy)
@@ -92,47 +120,102 @@ def rk4_step(params: DynamicParams, state, target_vel, target_steer):
     """RK4 integration for a single car."""
     DT = params.DT
     K1 = dbm_dxdt(
-        *state, target_vel, target_steer,
-        params.Ta, params.Tb, params.Sa, params.Sb,
-        params.LF, params.LR, params.MASS,
-        params.K_RFY, params.K_FFY, params.Iz,
-        params.mu, params.Cf, params.Cr,
-        params.Bf, params.Br, params.hcom, params.fr
+        *state,
+        target_vel,
+        target_steer,
+        params.Ta,
+        params.Tb,
+        params.Sa,
+        params.Sb,
+        params.LF,
+        params.LR,
+        params.MASS,
+        params.K_RFY,
+        params.K_FFY,
+        params.Iz,
+        params.mu,
+        params.Cf,
+        params.Cr,
+        params.Bf,
+        params.Br,
+        params.hcom,
+        params.fr
     )
 
     S2 = tuple(state[i] + 0.5 * DT * K1[i] for i in range(6))
     K2 = dbm_dxdt(
-        *S2, target_vel, target_steer,
-        params.Ta, params.Tb, params.Sa, params.Sb,
-        params.LF, params.LR, params.MASS,
-        params.K_RFY, params.K_FFY, params.Iz,
-        params.mu, params.Cf, params.Cr,
-        params.Bf, params.Br, params.hcom, params.fr
+        *S2,
+        target_vel,
+        target_steer,
+        params.Ta,
+        params.Tb,
+        params.Sa,
+        params.Sb,
+        params.LF,
+        params.LR,
+        params.MASS,
+        params.K_RFY,
+        params.K_FFY,
+        params.Iz,
+        params.mu,
+        params.Cf,
+        params.Cr,
+        params.Bf,
+        params.Br,
+        params.hcom,
+        params.fr
     )
 
     S3 = tuple(state[i] + 0.5 * DT * K2[i] for i in range(6))
     K3 = dbm_dxdt(
-        *S3, target_vel, target_steer,
-        params.Ta, params.Tb, params.Sa, params.Sb,
-        params.LF, params.LR, params.MASS,
-        params.K_RFY, params.K_FFY, params.Iz,
-        params.mu, params.Cf, params.Cr,
-        params.Bf, params.Br, params.hcom, params.fr
+        *S3,
+        target_vel,
+        target_steer,
+        params.Ta,
+        params.Tb,
+        params.Sa,
+        params.Sb,
+        params.LF,
+        params.LR,
+        params.MASS,
+        params.K_RFY,
+        params.K_FFY,
+        params.Iz,
+        params.mu,
+        params.Cf,
+        params.Cr,
+        params.Bf,
+        params.Br,
+        params.hcom,
+        params.fr
     )
 
     S4 = tuple(state[i] + DT * K3[i] for i in range(6))
     K4 = dbm_dxdt(
-        *S4, target_vel, target_steer,
-        params.Ta, params.Tb, params.Sa, params.Sb,
-        params.LF, params.LR, params.MASS,
-        params.K_RFY, params.K_FFY, params.Iz,
-        params.mu, params.Cf, params.Cr,
-        params.Bf, params.Br, params.hcom, params.fr
+        *S4,
+        target_vel,
+        target_steer,
+        params.Ta,
+        params.Tb,
+        params.Sa,
+        params.Sb,
+        params.LF,
+        params.LR,
+        params.MASS,
+        params.K_RFY,
+        params.K_FFY,
+        params.Iz,
+        params.mu,
+        params.Cf,
+        params.Cr,
+        params.Bf,
+        params.Br,
+        params.hcom,
+        params.fr
     )
 
     return tuple(
-        state[i] + DT / 6.0 * (K1[i] + 2 * K2[i] + 2 * K3[i] + K4[i])
-        for i in range(6)
+        state[i] + DT / 6.0 * (K1[i] + 2 * K2[i] + 2 * K3[i] + K4[i]) for i in range(6)
     )
 
 
@@ -145,9 +228,14 @@ def wrap_diff(a, b, L):
 
 
 def build_env_functions(
-    params: DynamicParams, EP_LEN: int, track_L: float, delay: int, wp_generate
+    params: DynamicParams,
+    EP_LEN: int,
+    track_L: float,
+    delay: int,
+    wp_generate,
+    reward_config: MPCRewardConfig,
 ):
-    """Build reset and step functions for single-agent environment."""
+    """Build reset and step functions for single-agent environment with MPC reward."""
 
     def jax_reset(key: jax.Array) -> Tuple[EnvState, jnp.ndarray]:
         # Spawn at a fixed starting position
@@ -161,13 +249,14 @@ def build_env_functions(
         )
         delay_buf = jnp.zeros((delay, 2), dtype=jnp.float32)
 
+        # Initialize reward state with zero action
+        reward_state = RewardState(last_action=jnp.zeros(2, dtype=jnp.float32))
+
         # Get initial waypoint features
         obs5 = jnp.array([car.x, car.y, car.psi, car.vx, car.vy])
         tgt, _, s, e = wp_generate(obs5, car.vx)
         theta = tgt[0, 2]
-        theta_diff = jnp.arctan2(
-            jnp.sin(theta - car.psi), jnp.cos(theta - car.psi)
-        )
+        theta_diff = jnp.arctan2(jnp.sin(theta - car.psi), jnp.cos(theta - car.psi))
         curv = tgt[0, 3]
         curv_lh = tgt[-1, 3]
 
@@ -183,6 +272,7 @@ def build_env_functions(
             t=jnp.array(0, jnp.int32),
             last_s=s,
             track_L=jnp.asarray(track_L, jnp.float32),
+            reward_state=reward_state,
         )
 
         return state, obs
@@ -217,39 +307,38 @@ def build_env_functions(
         obs5 = jnp.array([car2.x, car2.y, car2.psi, car2.vx, car2.vy])
         tgt, _, s, e = wp_generate(obs5, car2.vx)
         theta = tgt[0, 2]
-        theta_diff = jnp.arctan2(
-            jnp.sin(theta - car2.psi), jnp.cos(theta - car2.psi)
-        )
+        theta_diff = jnp.arctan2(jnp.sin(theta - car2.psi), jnp.cos(theta - car2.psi))
         curv = tgt[0, 3]
         curv_lh = tgt[-1, 3]
 
+        # Current observation (before step)
+        current_obs = jnp.array(
+            [state.last_s, 0.0, 0.0, S.vx, S.vy, S.omega, 0.0, 0.0],
+            dtype=jnp.float32,
+        )
+
+        # Next observation (after step)
         next_obs = jnp.array(
             [s, e, theta_diff, car2.vx, car2.vy, car2.omega, curv, curv_lh],
             dtype=jnp.float32,
         )
 
-        # Reward: progress along track (scaled)
-        progress = wrap_diff(s, state.last_s, track_L)
-        reward = progress * 10.0  # Scale up progress reward
-
-        # Penalty for cross-track error (soft)
-        cross_track_penalty = jnp.clip(jnp.abs(e), 0.0, 2.0)
-        reward = reward - cross_track_penalty
-
-        # Heavy penalty for going off track (|e| > 2m is very bad)
-        off_track = jnp.where(jnp.abs(e) > 2.0, -10.0, 0.0)
-        reward = reward + off_track
-
-        # Small bonus for maintaining forward velocity
-        velocity_bonus = jnp.clip(car2.vx, 0.0, 2.0) * 0.1
-        reward = reward + velocity_bonus
+        # Compute MPC-inspired reward
+        reward, new_reward_state = compute_mpc_reward(
+            current_obs, a0, next_obs, state.reward_state, reward_config, track_L
+        )
 
         t2 = state.t + jnp.int32(1)
         done = t2 >= jnp.int32(EP_LEN)
         truncated = done
 
         state2 = EnvState(
-            car=car2, delay_buf=buf1, t=t2, last_s=s, track_L=track_L
+            car=car2,
+            delay_buf=buf1,
+            t=t2,
+            last_s=s,
+            track_L=track_L,
+            reward_state=new_reward_state,
         )
 
         return state2, next_obs, reward, done, truncated
@@ -281,7 +370,12 @@ def load_path(waypoint_type, ref_trajs_dir=None):
 EP_LEN = 500
 
 
-def build_single_agent_env(num_envs, params_yaml_path=None, ref_trajs_dir=None):
+def build_single_agent_env(
+    num_envs,
+    params_yaml_path=None,
+    ref_trajs_dir=None,
+    reward_config: MPCRewardConfig = None,
+):
     """
     Build JAX-compiled reset and step functions for single-agent racing.
 
@@ -289,6 +383,7 @@ def build_single_agent_env(num_envs, params_yaml_path=None, ref_trajs_dir=None):
         num_envs: Number of parallel environments
         params_yaml_path: Path to the params YAML file
         ref_trajs_dir: Base directory for reference trajectories
+        reward_config: MPC reward configuration (uses default if None)
 
     Returns:
         reset_jit: JIT-compiled reset function
@@ -304,6 +399,9 @@ def build_single_agent_env(num_envs, params_yaml_path=None, ref_trajs_dir=None):
         params_yaml_path = os.path.join(
             os.path.dirname(__file__), "data", "params-num.yaml"
         )
+
+    if reward_config is None:
+        reward_config = create_default_reward_config()
 
     path = load_path(params_yaml_path, ref_trajs_dir)
     spec = init_waypoints(
@@ -322,7 +420,7 @@ def build_single_agent_env(num_envs, params_yaml_path=None, ref_trajs_dir=None):
         return targets, kin_pos, s, e
 
     reset_fn, step_fn = build_env_functions(
-        params, EP_LEN, float(track_L), params.delay, wp_generate
+        params, EP_LEN, float(track_L), params.delay, wp_generate, reward_config
     )
 
     reset_jit = jax.jit(reset_fn)
