@@ -1,161 +1,125 @@
-# JIT NEPPO - Isolated Module
+# Peg Racer - JIT NEPPO Environment & Visualizer
 
-This directory contains an isolated, standalone version of the JIT NEPPO (JAX-based racing environment) module, extracted from the main peg_racer repository.
-
-**✨ Ready to use!** This module includes example data for the Berlin 2018 track, so you can start testing immediately.
+A JAX-based racing environment with real-time visualization.
 
 ## Files
 
-- **jit_neppo.py** - Main module containing the racing environment dynamics and functions
-- **jax_waypoint.py** - Waypoint generation and trajectory following utilities
-- **data/** - Directory with example track data (Berlin 2018 track included)
-  - **params-num.yaml** - Track configuration file
-  - **ref_trajs/berlin_2018_with_speeds.csv** - Reference trajectory data
-- **verify_data.py** - Script to verify data files are properly configured
+- **jit_neppo.py** - Main racing environment with JIT-compiled dynamics
+- **jax_waypoint.py** - Waypoint generation and trajectory following
+- **visualizer.py** - Pygame-based visualizer for the racing environment
+- **waypoint_controller.py** - Waypoint-following controllers
+- **run_jit_neppo.py** - Simple test runner for the environment
+- **run_visualization.py** - Run environment with visualization
+- **data/** - Track data (Berlin 2018 track)
+  - **params-num.yaml** - Track configuration
+  - **ref_trajs/berlin_2018_with_speeds.csv** - Reference trajectory
 
 ## Dependencies
 
-The isolated module requires only standard Python packages:
-- `jax` - For JIT compilation and array operations
-- `jax.numpy` - JAX's numpy interface
-- `numpy` - Standard numerical operations
-- `pandas` - For reading CSV trajectory files
-- `pyyaml` - For reading YAML configuration files
-
-Install dependencies:
 ```bash
-pip install jax jaxlib numpy pandas pyyaml
+pip install jax jaxlib numpy pandas pyyaml pygame
+```
+
+## Quick Start
+
+### Run with Visualization
+
+```bash
+python run_visualization.py
+```
+
+This will start the racing environment with 3 cars on the Berlin 2018 track.
+
+**Controls:**
+- SPACE - Pause/Resume
+- ESC - Quit
+
+### Test Environment Only
+
+```bash
+python run_jit_neppo.py
 ```
 
 ## Usage
 
-### Basic Usage
+### Basic Environment
 
 ```python
 from jit_neppo import build_step_and_reset
 import jax
+import jax.numpy as jnp
 
-# Build the environment functions (with default paths)
+# Build environment
 reset_fn, step_fn = build_step_and_reset(num_envs=1)
 
-# Initialize the environment
+# Initialize
 key = jax.random.PRNGKey(0)
 state, obs = reset_fn(key)
 
-# Take a step
-action = jnp.array([[0.5, 0.0]])  # [throttle, steering] for 1 env
+# Step
+action = jnp.array([[0.5, 0.0], [0.5, 0.0], [0.5, 0.0]])  # [throttle, steering] for 3 cars
 state, next_obs, reward, done, truncated, info = step_fn(state, action)
 ```
 
-### Custom Data Paths
-
-If you have your own configuration files and trajectories:
+### With Visualization
 
 ```python
 from jit_neppo import build_step_and_reset
+from visualizer import RacingVisualizer
+import jax
+import jax.numpy as jnp
 
-reset_fn, step_fn = build_step_and_reset(
-    num_envs=1,
-    params_yaml_path='/path/to/your/params.yaml',
-    ref_trajs_dir='/path/to/your/ref_trajs'
-)
+# Build environment
+reset_fn, step_fn = build_step_and_reset(num_envs=1)
+
+# Initialize
+key = jax.random.PRNGKey(0)
+state, obs = reset_fn(key)
+
+# Create visualizer
+viz = RacingVisualizer(width=1200, height=800, fps=20)
+
+# Simulation loop
+for step in range(500):
+    # Get action (e.g., from controller or policy)
+    action = jnp.array([[0.5, 0.0], [0.5, 0.0], [0.5, 0.0]])
+
+    # Step environment
+    state, obs, reward, done, truncated, info = step_fn(state, action)
+
+    # Render
+    viz.render(state, step, reward)
+
+    # Check for quit
+    if viz.check_quit() == 'quit':
+        break
+
+viz.close()
 ```
 
-## Data Structure
+## Environment Details
 
-The module includes example data files for the Berlin 2018 track:
+**State:** 3 cars racing on a track
+- Position: (x, y)
+- Heading: psi
+- Velocities: (vx, vy, omega)
 
-```
-jit_neppo_isolated/
-├── data/
-│   ├── params-num.yaml                    # Track configuration (included)
-│   └── ref_trajs/
-│       └── berlin_2018_with_speeds.csv    # Reference trajectory (included)
-```
+**Actions:** `[throttle, steering]`
+- throttle: [0, 1]
+- steering: [-1, 1]
 
-**Note:** The example data is included and ready to use! You can test the module immediately or replace with your own track data.
-
-### YAML Configuration Format
-
-The `params-num.yaml` file should have the following structure:
-
-```yaml
-track_info:
-  centerline_file: "centerline_name.csv"  # Without "_with_speeds" suffix
-  ox: 0.0  # X offset
-  oy: 0.0  # Y offset
-  scale: 1.0  # Scale factor
-```
-
-### CSV Trajectory Format
-
-The trajectory CSV file should have 4 columns: `[s, x, y, v]`
-- `s`: Arc length along the track
-- `x`: X coordinate
-- `y`: Y coordinate
-- `v`: Reference velocity
-
-## Key Functions
-
-### `build_step_and_reset(num_envs, params_yaml_path=None, ref_trajs_dir=None)`
-
-Builds JIT-compiled reset and step functions for the racing environment.
-
-**Parameters:**
-- `num_envs`: Number of parallel environments
-- `params_yaml_path`: Path to params YAML file (default: `./data/params-num.yaml`)
-- `ref_trajs_dir`: Directory with reference trajectories (default: `./data/ref_trajs`)
-
-**Returns:**
-- `reset_jit`: JIT-compiled reset function
-- `step_jit`: JIT-compiled step function
-
-### Environment State
-
-The environment manages multiple cars (3 by default) with the following state:
-- `x, y`: Position
-- `psi`: Heading angle
-- `vx, vy`: Velocities
-- `omega`: Angular velocity
-
-### Actions
-
-Actions are `[throttle, steering]` pairs where:
-- `throttle`: [0, 1] - Forward throttle
-- `steering`: [-1, 1] - Steering angle
-
-### Observations
-
-15-dimensional observation vector per car:
+**Observations:** 15-dimensional per car
 1. Relative arc length to front car
-2. Front car's lateral error
+2. Front car lateral error
 3. Self lateral error
-4. Front car's heading error
-5-7. Front car's velocities (vx, vy, omega)
+4. Front car heading error
+5-7. Front car velocities
 8. Self heading error
-9-11. Self velocities (vx, vy, omega)
-12. Front car's path curvature
-13. Self path curvature
-14. Front car's lookahead curvature
-15. Self lookahead curvature
+9-11. Self velocities
+12. Front car curvature
+13. Self curvature
+14-15. Lookahead curvatures
 
-### Rewards
+**Reward:** Change in relative position along the track
 
-Reward is the change in relative arc length position compared to the maximum of the other two cars.
-
-## Changes from Original
-
-The following changes were made to isolate this module:
-
-1. **Import changes**: Changed `from car_dynamics.controllers_jax.jax_waypoint` to `from jax_waypoint`
-2. **Path handling**: Made all file paths relative or configurable through function parameters
-3. **Documentation**: Added docstrings and this README
-
-## Original Source
-
-- Original location: `car_ros2/car_ros2/rl_env/jit_neppo.py`
-- Dependency: `car_dynamics/car_dynamics/controllers_jax/jax_waypoint.py`
-
-## License
-
-Refer to the main peg_racer repository for license information.
+**Physics:** Dynamic bicycle model with RK4 integration, 4-step action delay
