@@ -377,8 +377,8 @@ def load_path(waypoint_type):
         centerline_file = yaml_content['track_info']['centerline_file'][:-4]
         ox = yaml_content['track_info']['ox']
         oy = yaml_content['track_info']['oy']
-        # Get the repository root directory (3 levels up from this file)
-        repo_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
+        # Get the repository root directory (file is now at repo root)
+        repo_root = os.path.dirname(os.path.abspath(__file__))
         ref_trajs_path = os.path.join(repo_root, 'ref_trajs', centerline_file + '_with_speeds.csv')
         df = pd.read_csv(ref_trajs_path)
         if waypoint_type.find('num') != -1:
@@ -394,8 +394,8 @@ def build_step_and_reset(num_envs):
     import os
     params = DynamicParams(num_envs=num_envs, DT=0.1, Sa=0.34, Sb=0.0, Ta=20., Tb=0., mu=0.5, delay=4)
 
-    # Get the repository root directory (3 levels up from this file)
-    repo_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
+    # Get the repository root directory (file is now at repo root)
+    repo_root = os.path.dirname(os.path.abspath(__file__))
     path_rn = os.path.join(repo_root, 'simulators', 'params-num.yaml')
     path = load_path(path_rn)
     spec = init_waypoints(kind='custom', dt=0.1, H=9, speed=1.0, path=jnp.array(path), scale=6.5)

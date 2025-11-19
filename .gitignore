@@ -1,2 +1,6 @@
 *.pkl
 *.npy
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
